@@ -31,9 +31,9 @@ Predicator is a Python package that provides a flexible way to handle hierarchic
 
 Install using pip:
 
-~~~bash
+```bash
 pip install git+https://github.com/mmiguel6288/predicator.git
-~~~
+```
 
 ## Basic Usage
 
@@ -41,7 +41,7 @@ pip install git+https://github.com/mmiguel6288/predicator.git
 
 Here's a simple example using synchronous predicates:
 
-~~~python
+```python
 from predicator import PredicatorDict
 
 # Define your config
@@ -65,13 +65,13 @@ settings = PredicatorDict(config, environment_checker)
 
 # Access values - they'll be resolved based on your predicate evaluator
 pool_size = settings["database_pool_size"]  # Returns 100 if in production
-~~~
+```
 
 ### Asynchronous Usage
 
 For scenarios where predicate evaluation needs to be asynchronous (e.g., database lookups, API calls):
 
-~~~python
+```python
 import asyncio
 from predicator import PredicatorDict
 
@@ -110,13 +110,13 @@ async def main():
         print(f"{key}: {value}")
 
 asyncio.run(main())
-~~~
+```
 
 ### Custom Predicate Keys
 
 If your configuration needs to use "specific" or "generic" as actual data keys, you can customize the predicate keys:
 
-~~~python
+```python
 # Using custom keys
 config = {
     "database_pool_size": {
@@ -141,7 +141,7 @@ pool_size = settings["database_pool_size"]
 
 # Async access
 pool_size = await settings.aget("database_pool_size")
-~~~
+```
 
 ## Advanced Usage
 
@@ -149,7 +149,7 @@ pool_size = await settings.aget("database_pool_size")
 
 You can nest conditions to create more complex logic:
 
-~~~python
+```python
 config = {
     "api_rate_limit": {
         "specific": {
@@ -173,13 +173,13 @@ async def check_conditions(predicate):
 async def main():
     settings = PredicatorDict(config, check_conditions)
     rate_limit = await settings.aget("api_rate_limit")
-~~~
+```
 
 ### Feature Flags
 
 Perfect for feature flag systems with async checks:
 
-~~~python
+```python
 config = {
     "ui_theme": {
         "specific": {
@@ -199,7 +199,7 @@ async def feature_checker(predicate):
     if predicate == "holiday_season":
         return await check_holiday_dates()
     return False
-~~~
+```
 
 ## How It Works
 
