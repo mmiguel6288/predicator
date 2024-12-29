@@ -1,8 +1,12 @@
-from typing import Any, Callable, Dict, Tuple, Iterator, KeysView, Optional
+from typing import Any, Callable, Dict, Tuple, Iterator, KeysView, Optional, AsyncIterator, Awaitable, Union
 from collections.abc import Mapping
 from dataclasses import dataclass
+import inspect
 
-PredicateEvaluator = Callable[[str], bool]
+PredicateEvaluator = Union[
+        Callable[[str], bool],
+        Callable[[str],Awaitable[bool]],
+        ]
 
 @dataclass
 class Resolution:
@@ -67,11 +71,27 @@ class PredicatorDict(Mapping):
         value = self._config[key]
         if not self._is_predicator_dict(value):
             return value
+        if self._is_async_callable(self._predicate_evaluator):
+            raise RuntimeError("Async predicate evaluator requires using aget() method")
             
         specific = value[self.specific_key]
         generic = self._wrap_generic(specific[self.generic_key])
         resolution = self._resolve_specific(specific, generic)
         return resolution.value
+
+    async def aget(self, key: str, default: Any = None) -> Any:
+        """Async version of get()"""
+        if key not in self._config:
+            return default
+        value = self._config[key]
+        if not self._is_predicator_dict(value):
+            return value
+
+        specific = value[self.specific_key]
+        generic = self._wrap_generic(specific[self.generic_key])
+        resolution = await self._resolve_specific_async(specific, generic)
+        return resolution.value
+
     
     def _is_predicator_dict(self, value: Any) -> bool:
         """Check if a value represents a predicator dictionary structure."""
@@ -94,15 +114,25 @@ class PredicatorDict(Mapping):
             if isinstance(generic, dict) 
             else generic
         )
+    @staticmethod
+    def _is_async_callable(obj: Any) -> bool:
+        """Check if a callable is async."""
+        return (
+                inspect.iscoroutinefunction(obj) or
+                (hasattr(obj, '__call__') and
+                 inspect.iscoroutinefunction(obj.__call__))
+                )
 
     def _resolve_specific(self, specific: Dict, generic: Any) -> Resolution:
         """
-        Resolve the most specific applicable value.
+        Resolve the most specific applicable value. Synchronous version.
         
         Args:
             specific: Dictionary containing predicates and values
             generic: Default value if no predicates match
         """
+        if self._is_async_callable(self._predicate_evaluator):
+            raise RuntimeError('Async predicate evaluator requires using async methods')
         for pred_condition, pred_value in specific.items():
             if pred_condition == self.generic_key:
                 continue
@@ -123,6 +153,30 @@ class PredicatorDict(Mapping):
 
         return Resolution(False, generic)
 
+    async def _resolve_specific_async(self, specific: Dict, generic: Any) -> Resolution:
+        """Async version of resolve_specific"""
+        for pred_condition, pred_value in specific.items():
+            if pred_condition == self.generic_key:
+                continue
+            predicate_result = (
+                    await self._predicate_evaluator(pred_condition)
+                    if
+                    self._is_async_callable(self._predicate_evaluator)
+                    else
+                    self._predicate_evaluator(pred_condition)
+                    )
+            if not predicate_result:
+                continue
+            if not isinstance(pred_value, dict):
+                return Resolution(True, pred_value)
+            current_generic = pred_value.get(self.generic_key, generic)
+            current_generic = self._wrap_generic(current_generic)
+            end_here = self.generic_key in pred_value
+            resolution = await self._resolve_specific_async(pred_value, current_generic)
+            if resolution.resolved or end_here:
+                return resolution
+
+        return Resolution(False, generic)
     # Mapping interface implementations
     def __contains__(self, key: str) -> bool:
         return key in self._config
@@ -144,3 +198,21 @@ class PredicatorDict(Mapping):
         
     def items(self) -> Iterator[Tuple[str, Any]]:
         return ((key, self[key]) for key in self)
+
+    # Async Methods
+    async def __aiter__(self) -> AsyncIterator[str]:
+        for key in self._config:
+            yield key
+
+    async def avalues(self) -> AsyncIterator[Any]:
+        """Async iteration over values."""
+        for key in self._config:
+            yield await self.aget(key)
+
+    async def aitems(self) -> AsyncIterator[Tuple[str, Any]]:
+        """Async iteration over key-value pairs."""
+        for key in self._config:
+            value = await self.aget(key)
+            yield key, value
+
+

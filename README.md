@@ -15,7 +15,7 @@
 
 # Predicator
 
-Predicator is a Python package that provides a flexible way to handle hierarchical conditional configurations. It allows you to define configurations that can adapt based on runtime conditions, without sacrificing readability or maintainability.
+Predicator is a Python package that provides a flexible way to handle hierarchical conditional configurations. It allows you to define configurations that can adapt based on runtime conditions, without sacrificing readability or maintainability. It supports both synchronous and asynchronous predicate evaluation.
 
 ## Features
 
@@ -24,20 +24,24 @@ Predicator is a Python package that provides a flexible way to handle hierarchic
 - Uses an intuitive "specific"/"generic" pattern for clear hierarchy
 - Maintains backwards compatibility with simple configs
 - Flexible predicate evaluation system
+- Supports both synchronous and asynchronous predicate evaluation
+- Full async iteration support
 
 ## Installation
 
 Install using pip:
 
-```bash
+~~~bash
 pip install git+https://github.com/mmiguel6288/predicator.git
-```
+~~~
 
 ## Basic Usage
 
-Here's a simple example of using Predicator:
+### Synchronous Usage
 
-```python
+Here's a simple example using synchronous predicates:
+
+~~~python
 from predicator import PredicatorDict
 
 # Define your config
@@ -61,11 +65,58 @@ settings = PredicatorDict(config, environment_checker)
 
 # Access values - they'll be resolved based on your predicate evaluator
 pool_size = settings["database_pool_size"]  # Returns 100 if in production
-```
+~~~
+
+### Asynchronous Usage
+
+For scenarios where predicate evaluation needs to be asynchronous (e.g., database lookups, API calls):
+
+~~~python
+import asyncio
+from predicator import PredicatorDict
+
+# Define your config
+config = {
+    "database_pool_size": {
+        "specific": {
+            "generic": 10,
+            "high_load": 100
+        }
+    }
+}
+
+# Async predicate evaluator
+async def load_checker(predicate):
+    # Simulate checking system metrics asynchronously
+    await asyncio.sleep(0.1)
+    return predicate == "high_load"
+
+async def main():
+    settings = PredicatorDict(config, load_checker)
+    
+    # Use aget() for async access
+    pool_size = await settings.aget("database_pool_size")
+    
+    # Async iteration
+    async for key in settings:
+        value = await settings.aget(key)
+        print(f"{key}: {value}")
+    
+    # Alternative async iterations
+    async for value in settings.avalues():
+        print(value)
+    
+    async for key, value in settings.aitems():
+        print(f"{key}: {value}")
+
+asyncio.run(main())
+~~~
 
 ### Custom Predicate Keys
+
 If your configuration needs to use "specific" or "generic" as actual data keys, you can customize the predicate keys:
-```python
+
+~~~python
 # Using custom keys
 config = {
     "database_pool_size": {
@@ -85,18 +136,21 @@ settings = PredicatorDict(
     generic_key="@default"
 )
 
-pool_size = settings["database_pool_size"]  # Works the same way
-```
+# Sync access
+pool_size = settings["database_pool_size"]
+
+# Async access
+pool_size = await settings.aget("database_pool_size")
+~~~
 
 ## Advanced Usage
 
 ### Nested Conditions
 
-You can nest conditions to create more complex logic. When using custom keys, they must be consistent throughout the structure:
+You can nest conditions to create more complex logic:
 
-```python
-# Using default keys
-config_default = {
+~~~python
+config = {
     "api_rate_limit": {
         "specific": {
             "generic": 100,  # Default rate limit
@@ -108,41 +162,24 @@ config_default = {
     }
 }
 
-# Using custom keys
-config_custom = {
-    "api_rate_limit": {
-        "@rules": {
-            "@default": 100,
-            "premium_user": {
-                "@default": 500,
-                "high_usage_period": 1000
-            }
-        }
-    }
-}
-
-def predicate_evaluator(predicate):
+# Async predicate evaluator
+async def check_conditions(predicate):
     conditions = {
-        "premium_user": True,
-        "high_usage_period": False
+        "premium_user": await check_premium_status(),
+        "high_usage_period": await check_usage_metrics()
     }
     return conditions.get(predicate, False)
 
-# Choose your preferred key style
-settings = PredicatorDict(
-    config_custom, 
-    predicate_evaluator,
-    specific_key="@rules",
-    generic_key="@default"
-)
-rate_limit = settings["api_rate_limit"]  # Returns 500
-```
+async def main():
+    settings = PredicatorDict(config, check_conditions)
+    rate_limit = await settings.aget("api_rate_limit")
+~~~
 
 ### Feature Flags
 
-Perfect for feature flag systems:
+Perfect for feature flag systems with async checks:
 
-```python
+~~~python
 config = {
     "ui_theme": {
         "specific": {
@@ -155,34 +192,24 @@ config = {
         }
     }
 }
-```
 
-### Discord Bot Configuration
-
-Example for Discord bot settings:
-
-```python
-config = {
-    "command_prefix": {
-        "specific": {
-            "generic": "!",  # Default prefix
-            "guild_123": {
-                "generic": "?",  # Default for specific guild
-                "premium_tier_3": "$"  # Special prefix for premium tier
-            }
-        }
-    }
-}
-```
+async def feature_checker(predicate):
+    if predicate == "dark_mode_enabled":
+        return await check_user_preferences()
+    if predicate == "holiday_season":
+        return await check_holiday_dates()
+    return False
+~~~
 
 ## How It Works
 
 1. When accessing a configuration value, Predicator checks if it contains a "specific" structure
 2. The "generic" key provides the default value if no conditions match
 3. Other keys in the "specific" dictionary are treated as predicates
-4. Predicates are evaluated using the provided predicate_evaluator function
+4. Predicates are evaluated using the provided predicate_evaluator function (sync or async)
 5. Nested predicates create AND logic (all conditions must be true)
 6. The most specific matching value is returned
+7. When using async predicates, all access must use async methods (aget, aiter, etc.)
 
 ## Contributing
 

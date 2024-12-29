@@ -77,6 +77,7 @@ testpaths = [
 pythonpath = [
     "src"
 ]
+asyncio_mode = "strict"
 
 
 [tool.coverage]
